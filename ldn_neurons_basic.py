@@ -12,7 +12,7 @@ from scipy.special import legendre
 # LDN in neurons w/ controllable biases
 
 class LDN_RNN(object):
-    def __init__(self, q = 6, theta = 1., size_in = 1, n_neurons = 1000, tau_synapse = 0.05):
+    def __init__(self, q = 6, theta = 1., size_in = 1, n_neurons = 1000, tau_synapse = 0.05, neuron_type = nengo.LIFRate() ):
         '''
         adapted from Terry Stewart's LDN implementation
         https://github.com/tcstewar/testing_notebooks/blob/master/ldn/Basic%20Example.ipynb
@@ -22,6 +22,7 @@ class LDN_RNN(object):
         self.size_in = size_in  # number of inputs
         self.n_neurons = n_neurons
         self.tau_synapse = tau_synapse
+        self.neuron_type = neuron_type
         
         # Do Aaron Voelker's math to generate the matrices A and B so that
         #  dx/dt = Ax + Bu will convert u into a legendre representation over a window theta
@@ -42,14 +43,14 @@ class LDN_RNN(object):
                         n_neurons = self.n_neurons,
                         dimensions = self.size_in,
                         radius = 1.,
-                        neuron_type = nengo.LIFRate()
+                        neuron_type = self.neuron_type
                         )
             
             self.rec = nengo.Ensemble( 
                         n_neurons = self.n_neurons,
                         dimensions = self.q,
                         radius = np.sqrt(2),
-                        neuron_type = nengo.LIFRate()
+                        neuron_type = self.neuron_type
                         )
             
             def forward(x):
@@ -59,7 +60,7 @@ class LDN_RNN(object):
                 return self.tau_synapse * self.A @ x + x
         
             nengo.Connection( self.input, self.fw, synapse = None )
-            nengo.Connection( self.fw, self.rec, function = forward, synapse = tau_synapse )
+            nengo.Connection( self.fw, self.rec, function = forward, synapse = self.tau_synapse )
             nengo.Connection( self.rec, self.rec, function = recurrent, synapse = self.tau_synapse )
 
     def get_weights_for_delays(self, r):
