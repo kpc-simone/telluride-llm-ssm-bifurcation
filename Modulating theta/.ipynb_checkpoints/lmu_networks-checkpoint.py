@@ -231,7 +231,13 @@ class LMUModulatedNetwork(nengo.Network):
         
         with self:
             self.reset = nengo.Node(size_in=1)
+            
+            # Can either send a single signal to modulator for both A & B, or a different one to each
             self.modulator = nengo.Node(size_in=1)
+            self.recurrent_modulator = nengo.Node(size_in=1)
+            self.input_modulator = nengo.Node(size_in=1)
+            nengo.Connection(self.modulator, self.recurrent_modulator, synapse=None)
+            nengo.Connection(self.modulator, self.input_modulator, synapse=None)
                         
             self.lmu = nengo.networks.EnsembleArray(n_neurons, n_ensembles=size_in, 
                                                     ens_dimensions=q)
@@ -252,8 +258,8 @@ class LMUModulatedNetwork(nengo.Network):
                 nengo.Connection(self.lmu.ea_ensembles[i], self.lmu.ea_ensembles[i], synapse=tau )
                 nengo.Connection(self.reset, self.lmu.ea_ensembles[i].neurons, transform = [[-2.5]]*n_neurons, synapse=None)
                 
-                nengo.Connection(self.modulator, conn_in[-1].learning_rule, synapse=None)
-                nengo.Connection(self.modulator, conn_recur[-1].learning_rule, synapse=None)
+                nengo.Connection(self.input_modulator, conn_in[-1].learning_rule, synapse=None)
+                nengo.Connection(self.recurrent_modulator, conn_recur[-1].learning_rule, synapse=None)
 
     def get_weights_for_delays(self, r):
         # compute the weights needed to extract the value at time r
