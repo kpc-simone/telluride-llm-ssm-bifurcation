@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: gym_water_maze
+Version: 0.0.0
+Summary: Continuous water maze environment integrated with OpenAI/Gym
+Requires-Dist: gymnasium
+Requires-Dist: numpy
+Requires-Dist: matplotlib
+Provides-Extra: test
+Requires-Dist: stable-baselines3; extra == "test"

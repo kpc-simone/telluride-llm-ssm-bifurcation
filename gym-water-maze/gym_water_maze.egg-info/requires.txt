@@ -1,0 +1,6 @@
+gymnasium
+numpy
+matplotlib
+
+[test]
+stable-baselines3
