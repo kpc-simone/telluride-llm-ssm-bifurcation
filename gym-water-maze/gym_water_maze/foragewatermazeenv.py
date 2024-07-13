@@ -24,10 +24,11 @@ class ForageWaterMazeEnv(gym.Env):
                  render_mode = 'human',
                  reward_type = 'sparse', #sparse, active
                  live_display=False,
-                 render_trace=False):
+                 render_trace=False, penalty=0):
         """Initialize the maze. DType: list"""
         self.max_steps = max_steps
         self.radius = radius
+        self.penalty=penalty
         self.n_forage_spots = n_forage_spots
         if n_forage_spots==1:
             self.reward_base_probs = np.array([0.8])

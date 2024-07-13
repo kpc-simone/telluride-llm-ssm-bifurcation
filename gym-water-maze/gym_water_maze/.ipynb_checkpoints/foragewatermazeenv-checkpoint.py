@@ -22,11 +22,13 @@ class ForageWaterMazeEnv(gym.Env):
                  start = 'S', #S,E,W,N
                  max_steps = 100,
                  render_mode = 'human',
+                 reward_type = 'sparse', #sparse, active
                  live_display=False,
-                 render_trace=False):
+                 render_trace=False, penalty=0):
         """Initialize the maze. DType: list"""
         self.max_steps = max_steps
         self.radius = radius
+        self.penalty=penalty
         self.n_forage_spots = n_forage_spots
         if n_forage_spots==1:
             self.reward_base_probs = np.array([0.8])
@@ -62,11 +64,22 @@ class ForageWaterMazeEnv(gym.Env):
         # than storing the frames and creating an animation at the end
         self.live_display = live_display
 
-        self.action_space = spaces.Box(-action_radius, action_radius, (2,), dtype="float64")
+        self.reward_type = reward_type
+        if self.reward_type == 'active':
+            self.action_space = spaces.Box(-action_radius, action_radius, (3,), dtype="float64")
+            self.penalty = -0.05
+        else:
+            self.action_space = spaces.Box(-action_radius, action_radius, (2,), dtype="float64")
+
         self.observation_space = spaces.Box(-radius, radius, (2,), dtype="float64")
 
 
     def step(self, action):
+        if self.reward_type == 'active':
+            lick = action[-1] > 0
+            action = action[:-1]
+        else:
+            lick = True
         self.num_steps += 1
         reward = 0
         new_state = self.state + action
@@ -83,7 +96,7 @@ class ForageWaterMazeEnv(gym.Env):
         self.reward_times += self.dt
         dists = np.sqrt(np.sum( (self.state-self.goal_states)**2, axis=-1 ))
         self.reward_probs = 1 - (1 - self.reward_base_probs)**(self.reward_times + 1)
-        if np.any(dists <= self.goal_radius):
+        if lick and np.any(dists <= self.goal_radius):
             idx = np.arange(self.n_forage_spots) == np.argmin(dists)
             if np.random.rand() < self.reward_probs[idx].item():
                 reward  = 1
@@ -93,7 +106,8 @@ class ForageWaterMazeEnv(gym.Env):
                 self.reward_times[idx] = 0
             else:
                 self.reward_times[idx] -= 2*self.dt
-
+        if lick and np.all(dists > self.goal_radius):
+            reward = self.penalty
         terminated = False
 
         if self.num_steps >= self.max_steps:
