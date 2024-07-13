@@ -18,6 +18,7 @@ from nengo.builder.connection import slice_signal
 from nengo.node import Node
 from nengo.exceptions import BuildError
 
+
 #####################################
 #Synaptic Modulation rule: multiples decoders by a modulator signal
 ########################################
@@ -60,10 +61,8 @@ class SimSynapticModulation(Operator):
         weights = signals[self.weights]
         delta = signals[self.delta]
         rate = signals[self.modulation]
-#         print(delta, rate)
         def step_simsynmod():
              delta[...] = (rate-1)*weights
-#             printf("HELLO", flush=True)
         return step_simsynmod
 
 

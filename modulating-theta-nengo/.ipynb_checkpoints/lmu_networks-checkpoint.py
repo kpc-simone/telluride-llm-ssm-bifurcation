@@ -2,10 +2,10 @@ import nengo
 import numpy as np
 import scipy.linalg
 from scipy.special import legendre
-from learning_rules import SynapticModulation
+from learning_rules import SynapticModulation, CumulativeSynapticModulation
 
 
-###############################3
+###############################
 #     simple LMU as a process: transforms done exactly, useful if creating custom time loop, cannot be used in a nengo network
 #############################
 
@@ -255,6 +255,60 @@ class LMUModulatedNetwork(nengo.Network):
                     
                 conn_recur.append( nengo.Connection(self.lmu.ea_ensembles[i], self.lmu.ea_ensembles[i], synapse=tau,
                                  transform = tau*self.A, learning_rule_type=SynapticModulation()) )
+                nengo.Connection(self.lmu.ea_ensembles[i], self.lmu.ea_ensembles[i], synapse=tau )
+                nengo.Connection(self.reset, self.lmu.ea_ensembles[i].neurons, transform = [[-2.5]]*n_neurons, synapse=None)
+                
+                nengo.Connection(self.input_modulator, conn_in[-1].learning_rule, synapse=None)
+                nengo.Connection(self.recurrent_modulator, conn_recur[-1].learning_rule, synapse=None)
+
+    def get_weights_for_delays(self, r):
+        # compute the weights needed to extract the value at time r
+        # from the network (r=0 is right now, r=1 is theta seconds ago)
+        return np.kron(np.eye(self.size_in),np.asarray([legendre(i)(2*r - 1) for i in range(self.q)]).reshape(self.q, -1).T)
+
+class LMUModulatedNetwork(nengo.Network):
+    def __init__(self, input_ens, n_neurons, theta, q, size_in=1,tau=0.05,r=1,**kwargs):
+        super().__init__(**kwargs)
+        
+        self.q = q              # number of internal state dimensions per input
+        self.theta = theta      # size of time window (in seconds)
+        self.size_in = size_in  # number of inputs
+
+        # Do Aaron's math to generate the matrices
+        #  https://github.com/arvoelke/nengolib/blob/master/nengolib/synapses/analog.py#L536
+        Q = np.arange(q, dtype=np.float64)
+        R = (2*Q + 1)[:, None] / theta
+        j, i = np.meshgrid(Q, Q)
+
+        self.A = np.where(i < j, -1, (-1.)**(i-j+1)) * R
+        self.B = (-1.)**Q[:, None] * R
+        
+        with self:
+            self.reset = nengo.Node(size_in=1)
+            
+            # Can either send a single signal to modulator for both A & B, or a different one to each
+            self.modulator = nengo.Node(size_in=1)
+            self.recurrent_modulator = nengo.Node(size_in=1)
+            self.input_modulator = nengo.Node(size_in=1)
+            nengo.Connection(self.modulator, self.recurrent_modulator, synapse=None)
+            nengo.Connection(self.modulator, self.input_modulator, synapse=None)
+                        
+            self.lmu = nengo.networks.EnsembleArray(n_neurons, n_ensembles=size_in, 
+                                                    ens_dimensions=q)
+            self.output = self.lmu.output
+            
+            conn_in = []
+            conn_recur = []
+            for i in range(size_in):
+                if type(input_ens)==nengo.ensemble.Ensemble:
+                    conn_in.append( nengo.Connection(input_ens[i], self.lmu.ea_ensembles[i], synapse=tau,
+                                 transform = tau*self.B , learning_rule_type=CumulativeSynapticModulation()))
+                else:
+                    conn_in.append( nengo.Connection(input_ens.ea_ensembles[i], self.lmu.ea_ensembles[i], synapse=tau,
+                                 transform = tau*self.B , learning_rule_type=CumulativeSynapticModulation()))
+                    
+                conn_recur.append( nengo.Connection(self.lmu.ea_ensembles[i], self.lmu.ea_ensembles[i], synapse=tau,
+                                 transform = tau*self.A, learning_rule_type=CumulativeSynapticModulation()) )
                 nengo.Connection(self.lmu.ea_ensembles[i], self.lmu.ea_ensembles[i], synapse=tau )
                 nengo.Connection(self.reset, self.lmu.ea_ensembles[i].neurons, transform = [[-2.5]]*n_neurons, synapse=None)
                 
