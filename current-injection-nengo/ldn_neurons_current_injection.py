@@ -11,7 +11,7 @@ with nengo.Network() as model:
     q = 11
     theta = 0.5
     
-    input = nengo.Node(nengo.processes.WhiteSignal(1., high=5, seed=1))
+    input = nengo.Node(nengo.processes.WhiteSignal(5., high=5, seed=1))
     ldn_rnn = LDN_RNN( q = q, size_in = 1, theta = theta, neuron_type = nengo.LIFRate() )
     output = nengo.Node(None, size_in=1)
     
