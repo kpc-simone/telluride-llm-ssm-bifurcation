@@ -1,9 +1,11 @@
 import numpy as np
+import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
 import gym
 from PIL import Image
+import imageio
 
 import gym
 from gym import spaces
@@ -12,7 +14,7 @@ from gym import spaces
 plt.rcParams['font.family'] = 'Arial'
 
 class ForagingEnvNeuromod(gym.Env):
-    def __init__(self, dopa_lvl=0.5, grid_size=200, reward_block=(180, 180, 184, 184), penalty_block_size = 50, bear_pos = [50, 50], initial_agent_pos = [100, 100], step_size = 5, bear_size = 25):
+    def __init__(self, dopa_lvl=0.5, grid_size=200, reward_block=(180, 180, 184, 184), penalty_block_size = 30, bear_pos = [30, 30], initial_agent_pos = [100, 100], step_size = 5, bear_size = 25):
         super(ForagingEnvNeuromod, self).__init__()
 
         self.grid_size = grid_size # set the grid size
@@ -88,14 +90,16 @@ class ForagingEnvNeuromod(gym.Env):
 
         ## check if the agent is in the penalty block
         elif penalty_block_x_start <= self.agent_pos[0] <= penalty_block_x_end and penalty_block_y_start <= self.agent_pos[1] <= penalty_block_y_end:
-            reward = -100  # Set a large negative reward
+            reward = -200  # Set a large negative reward
             done = True  # Set the done flag to True
 
-        ## TODO: update dopa level if needed
+        
+
+        ## TODO: update dopamine level if needed
 
         return self.state, reward, done, {}
     
-    def render(self, mode = 'human'):
+    def render(self, mode = 'human', save_path = None):
         '''
         Render the environment
         '''
@@ -113,7 +117,7 @@ class ForagingEnvNeuromod(gym.Env):
         ax.add_patch(penalty_patch)  # Add the penalty block to the plot
 
         # draw the bear
-        im = ax.imshow(self.bear_sprite, extent=(self.bear_pos[1], self.bear_pos[1] + self.bear_size, self.bear_pos[0], self.bear_pos[0] + self.bear_size), origin = 'lower')
+        bear_image = ax.imshow(self.bear_sprite, extent=(self.bear_pos[1], self.bear_pos[1] + self.bear_size, self.bear_pos[0], self.bear_pos[0] + self.bear_size), origin = 'lower')
 
         # Draw the penalty block around the bear sprite
         penalty_patch = mpatches.Rectangle((self.bear_pos[1] - 2, self.bear_pos[0] - 2), self.penalty_block_size, self.penalty_block_size, linewidth=1, edgecolor='r', facecolor='none', linestyle='--')
@@ -123,44 +127,82 @@ class ForagingEnvNeuromod(gym.Env):
         ax.plot(self.initial_agent_pos[1], self.initial_agent_pos[0], 'rx', markersize = 10)
 
         # draw the agent
-        ax.plot(self.agent_pos[1], self.agent_pos[0], 'ko', label = 'Agent')
+        agent_plot, = ax.plot(self.agent_pos[1], self.agent_pos[0], 'ko', label = 'Agent')
 
         # plot the traces
         trace_x = [x[1] for x in self.trace]
         trace_y = [x[0] for x in self.trace]
-        ax.plot(trace_x, trace_y, c = 'k', label = 'Traces', alpha = 0.3)
+        trace_plot, = ax.plot(trace_x, trace_y, c = 'k', label = 'Traces', alpha = 0.3)
 
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        plt.gca().invert_yaxis()
-        # plt.axis('off')
-        plt.grid(True)
-        # plt.legend()
+        plt.gca().invert_yaxis()  # Invert the y-axis to match grid coordinates
+        plt.grid(True)  # Enable the grid
+        return fig, ax, bear_image, penalty_patch, agent_plot, trace_plot
 
 
-        # sns.despine()
+# def make_gif(env, num_steps, save_path):
+#     '''
+#     Make a gif of the evolution of the states of the agent and bear
+#     '''
+#     images = []  # List to store the frames of the gif
+#     env.reset()  # Reset the environment
+#     images.append(env.render(mode='rgb_array'))  # Append the initial frame to the list
 
+#     for _ in range(num_steps):
+#         action = env.action_space.sample()  # Randomly sample an action
+#         state, _, _, _ = env.step(action)  # Take a step in the environment
+#         images.append(env.render(mode='rgb_array'))  # Append the current frame to the list
 
-        plt.show()
+#     # Convert the frames to a gif
+#     gif = create_gif(images)
+
+#     # Save the gif to the specified path
+#     save_gif(gif, save_path)
+
+#     # Display the gif in Jupyter Notebook
+#     display_gif(gif)
+
+# def create_gif(images):
+#     '''
+#     Create a gif from a list of images
+#     '''
+#     gif = io.BytesIO()
+#     imageio.mimsave(gif, images, format='gif')
+#     return gif.getvalue()
+
+# def save_gif(gif, save_path):
+#     '''
+#     Save a gif to the specified path
+#     '''
+#     with open(save_path, 'wb') as f:
+#         f.write(gif)
+
+# def display_gif(gif):
+#     '''
+#     Display a gif in Jupyter Notebook
+#     '''
+#     html = '<img src="data:image/gif;base64,{0}">'.format(base64.b64encode(gif).decode())
+#     display(HTML(html))
 
 ## test the environment: Remove later
 
-env =  ForagingEnvNeuromod()
-env.reset()
-# env.render()
+# env =  ForagingEnvNeuromod()
+# env.reset()
+# # env.render()
 
-# # simulate 1 step
-# env.step(1)  # Move the agent down
+# # # simulate 1 step
+# # env.step(1)  # Move the agent down
+# # env.render()  # Render the environment
+
+# # env.step(3)  # Move the agent down
+# # env.render()  # Render the environment
+
+# steps_arr = np.random.randint(0, 4, 1000)
+# for step in steps_arr:
+#     env.step(step)
+
 # env.render()  # Render the environment
-
-# env.step(3)  # Move the agent down
-# env.render()  # Render the environment
-
-steps_arr = np.random.randint(0, 4, 1000)
-for step in steps_arr:
-    env.step(step)
-
-env.render()  # Render the environment
