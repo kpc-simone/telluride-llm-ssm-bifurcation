@@ -30,8 +30,8 @@ class ChasingBearEnv(gym.Env):
         self.observation_space = spaces.Box(0, 1, shape=(self.grid_size, self.grid_size), dtype=np.float32)
         # self.serotonin_level = 1.0  # Start with high serotonin level
         
-        self.bear_sprite = Image.open('sprites/bear_sprite.png')  # Load the bear sprite image
-        self.safe_house_sprite = Image.open('sprites/safe_house_sprite.png')  # Load the safe house sprite image
+        self.bear_sprite = Image.open('sprites/black_bear.png')  # Load the bear sprite image
+        self.safe_house_sprite = Image.open('sprites/BrickHouse.png')  # Load the safe house sprite image
         
     def reset(self):
         self.agent_pos = [10, 10]
@@ -118,14 +118,18 @@ class ChasingBearEnv(gym.Env):
         ax.set_ylim(0, self.grid_size)  # Set the y-axis limits
 
         # Draw the safehouse (reward block)
-        reward_patch = patches.Rectangle((self.reward_block[1], self.reward_block[0]), 
-                                         self.reward_block[3] - self.reward_block[1], 
-                                         self.reward_block[2] - self.reward_block[0], 
-                                         linewidth=1, edgecolor='g', facecolor='green')
-        ax.add_patch(reward_patch)  # Add the reward block to the plot
+        # reward_patch = patches.Rectangle((self.reward_block1[1], self.reward_block1[0]), 
+        #                                  self.reward_block1[3] - self.reward_block1[1], 
+        #                                  self.reward_block[2] - self.reward_block1[0], 
+        #                                  linewidth=1, edgecolor='g', facecolor='green')
+        # ax.add_patch(reward_patch)  # Add the reward block to the plot
+
+        # draw the safehouse (reward block)
+        sh1 = ax.imshow(self.safe_house_sprite, extent=(self.reward_block1[1], self.reward_block1[3], self.reward_block1[0], self.reward_block1[2]), origin = 'lower')
+        sh2 = ax.imshow(self.safe_house_sprite, extent=(self.reward_block2[1], self.reward_block2[3], self.reward_block2[0], self.reward_block2[2]), origin = 'lower')
 
         # Draw the bear sprite
-        bear_img = ax.imshow(self.bear_sprite, extent=(self.bear_pos[1], self.bear_pos[1] + self.bear_size, self.bear_pos[0], self.bear_pos[0] + self.bear_size))
+        bear_img = ax.imshow(self.bear_sprite, extent=(self.bear_pos[1], self.bear_pos[1] + self.bear_size, self.bear_pos[0], self.bear_pos[0] + self.bear_size), origin = 'lower')
 
         # Draw the agent
         ax.plot(self.agent_pos[1], self.agent_pos[0], 'bo')  # Plot the agent's position as a blue dot
@@ -144,3 +148,13 @@ class ChasingBearEnv(gym.Env):
             plt.savefig(f'frames/frame_{frame_num:04d}.png')
         
         plt.close(fig)
+
+
+# ## register the environment
+# gym.envs.registration.register(
+#     id='ChasingBear-v0',
+#     entry_point='ChasingBearEnv:ChasingBearEnv',
+#     max_episode_steps=200,
+# )
+
+# env = gym.make('ChasingBear-v0')
