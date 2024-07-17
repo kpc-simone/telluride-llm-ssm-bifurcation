@@ -21,6 +21,7 @@ class ChasingBearEnv(gym.Env):
         self.chase = False  # Flag to indicate if the bear is chasing the agent
         self.max_steps = 200  # Maximum number of steps per episode
         self.current_step = 0  # Current step count
+        self.step_size = 2 # Step size of the agent
         
         self.state = np.zeros((self.grid_size, self.grid_size))
         self.agent_pos = [10, 10]
@@ -32,6 +33,8 @@ class ChasingBearEnv(gym.Env):
         
         self.bear_sprite = Image.open('sprites/black_bear.png')  # Load the bear sprite image
         self.safe_house_sprite = Image.open('sprites/BrickHouse.png')  # Load the safe house sprite image
+
+        self.is_caught = False  # Flag to indicate if the agent is caught by the bear
         
     def reset(self):
         self.agent_pos = [10, 10]
@@ -47,13 +50,13 @@ class ChasingBearEnv(gym.Env):
         
         # Update the agent's position based on the action
         if action == 0:  # up
-            self.agent_pos[0] = max(0, self.agent_pos[0] - 1)
+            self.agent_pos[0] = max(0, self.agent_pos[0] - self.step_size)
         elif action == 1:  # down
-            self.agent_pos[0] = min(self.grid_size - 1, self.agent_pos[0] + 1)
+            self.agent_pos[0] = min(self.grid_size - 1, self.agent_pos[0] + self.step_size)
         elif action == 2:  # left
-            self.agent_pos[1] = max(0, self.agent_pos[1] - 1)
+            self.agent_pos[1] = max(0, self.agent_pos[1] - self.step_size)
         elif action == 3:  # right
-            self.agent_pos[1] = min(self.grid_size - 1, self.agent_pos[1] + 1)
+            self.agent_pos[1] = min(self.grid_size - 1, self.agent_pos[1] + self.step_size)
         
         # Add the new position to the trace
         self.trace.append(self.agent_pos.copy())
@@ -104,6 +107,7 @@ class ChasingBearEnv(gym.Env):
         
         # Check if the agent and bear occupy the same position
         if self.agent_pos == self.bear_pos:
+            self.is_caught = True  # Set the flag to indicate that the agent is caught
             return self.state, -500, True, {}, {}  # Large penalty and terminate
 
         # Check if the maximum number of steps has been reached
@@ -140,12 +144,15 @@ class ChasingBearEnv(gym.Env):
         ax.plot(trace_x, trace_y, 'k', linewidth=1, alpha = 0.5)  # Plot the trace as a blue line
 
         plt.gca().invert_yaxis()  # Invert the y-axis to match grid coordinates
-        plt.grid(True)  # Enable the grid
+        plt.grid(True)  # Enable the grid 
 
         if frame_num is not None:
             if not os.path.exists('frames'):
                 os.makedirs('frames')
             plt.savefig(f'frames/frame_{frame_num:04d}.png')
+
+        # turn off the axes
+        ax.axis('off')
         
         plt.close(fig)
 
