@@ -6,6 +6,7 @@ from matplotlib import colors
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from PIL import Image
 import random
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -80,8 +81,10 @@ class ForageBearMazeEnv(gym.Env):
                  bear_speed = 0.01,
                  agent_size=0.5,
                  agent_view_radius = 5,
-                 dt= 0.001,
+                 goal_decay = 0.2,
+                 goal_growth = 0.1,
                  start = 'S', #S,E,W,N
+                 bear_start = 'N',
                  max_steps = 100,
                  render_mode = 'human',
                  reward_type = 'sparse', #sparse, active
@@ -99,17 +102,12 @@ class ForageBearMazeEnv(gym.Env):
         else:
             self.reward_base_probs = np.random.rand(n_forage_spots)
         self.goal_radius = goal_radius
-        self.dt = dt
+        self.goal_decay = goal_decay
+        self.goal_growth = goal_growth
         self.reward_times = np.zeros(n_forage_spots)
         self.reward_probs = np.zeros(n_forage_spots)
-        if start=='S':
-            self.init_state = np.array([0.,-radius*0.8])
-        elif start=='N':
-            self.init_state = np.array([0.,radius*0.8])
-        elif start=='W':
-            self.init_state = np.array([-radius*0.8,0.])
-        elif start=='E':
-            self.init_state = np.array([radius*0.8,0.])
+        self.init_state = self.get_start(start, radius)
+        self.init_bear_state = self.get_start(bear_start, radius)
         if n_forage_spots==1:
             self.goal_states = np.array([[0.75,0.75]])
         elif n_forage_spots==2:
@@ -118,7 +116,7 @@ class ForageBearMazeEnv(gym.Env):
             self.goal_states = np.random.rand(n_forage_spots,2)*2 - 1
         self.goal_states = self.goal_states*radius/np.sqrt(2)
 
-        self.bear_state = np.array([0.,0.])
+        # self.bear_state = self.init_bear_state
         self.bear_radius = bear_radius
         self.bear_penalty = bear_penalty
         self.bear_speed = bear_speed
@@ -146,12 +144,27 @@ class ForageBearMazeEnv(gym.Env):
 
         self.observation_space = spaces.Box(-radius, radius, (2 + 2*self.lmu_q,), dtype="float64")
 
-        self.bear_sprite = Image.open('gym_water_maze/sprites/black_bear.png')  # Load the bear sprite image
-        self.safe_house_sprite = Image.open('gym_water_maze/sprites/BrickHouse.png')  # Load the safe house sprite image
-        self.agent_sprite = Image.open('gym_water_maze/sprites/jl_sprite1.png')
+        # self.bear_sprite = Image.open('gym_water_maze/sprites/black_bear.png')  # Load the bear sprite image
+        # self.safe_house_sprite = Image.open('gym_water_maze/sprites/BrickHouse.png')  # Load the safe house sprite image
+        # self.agent_sprite = Image.open('gym_water_maze/sprites/jl_sprite1.png')
+        self.bear_sprite ='gym_water_maze/sprites/black_bear.png'  # Load the bear sprite image
+        self.safe_house_sprite = 'gym_water_maze/sprites/BrickHouse.png'  # Load the safe house sprite image
+        self.agent_sprite = 'gym_water_maze/sprites/jl_sprite1.png'
 
+
+    def get_start(self, start, radius):
+        if start=='S':
+            state = np.array([0.,-radius*0.8])
+        elif start=='N':
+            state = np.array([0.,radius*0.8])
+        elif start=='W':
+            state = np.array([-radius*0.8,0.])
+        elif start=='E':
+            state = np.array([radius*0.8,0.])
+        elif start=='C':
+            state = np.array([0.,0.])
+        return state
         
-
 
     def step(self, action):
         if self.reward_type == 'active':
@@ -172,19 +185,16 @@ class ForageBearMazeEnv(gym.Env):
                 new_state = self.state + rs[np.where(rs>=0)[0][0]]*action
         self.state = new_state
         self.traces.append(self.state)
-        self.reward_times += self.dt
+        self.reward_times += self.goal_growth
         dists = np.sqrt(np.sum( (self.state-self.goal_states)**2, axis=-1 ))
         self.reward_probs = 1 - (1 - self.reward_base_probs)**(self.reward_times + 1)
         if lick and np.any(dists <= self.goal_radius):
-            idx = np.arange(self.n_forage_spots) == np.argmin(dists)
+            idx = np.argmin(dists)
             if np.random.rand() < self.reward_probs[idx].item():
                 reward  = 1
             else:
                 reward = 0
-            if self.reward_times[idx]>self.dt:
-                self.reward_times[idx] = 0
-            else:
-                self.reward_times[idx] -= 2*self.dt
+            self.reward_times[idx] -= self.goal_decay
         if lick and np.all(dists > self.goal_radius):
             reward = self.penalty
         terminated = False
@@ -193,15 +203,15 @@ class ForageBearMazeEnv(gym.Env):
         bear_dist = np.sqrt(np.sum( bear_vec**2 ))
         if bear_dist <= self.bear_radius:
             reward += self.bear_penalty
-        
-        self.bear_state += self.bear_speed*bear_vec/bear_dist
+        if self.chase:
+            self.bear_state += self.bear_speed*bear_vec/bear_dist
 
         if self.num_steps >= self.max_steps:
             truncated = True
         else:
             truncated = False
         # Additional info
-        info = {}
+        info = {'chase':self.chase}
 
         # new
         if bear_dist < self.agent_view_radius:
@@ -218,31 +228,40 @@ class ForageBearMazeEnv(gym.Env):
         obs = np.concatenate([self.state.flatten(), self.lmu.state.flatten()]).flatten()
         return obs
 
-    def reset(self, seed=None, **kwargs):
+    def reset(self, seed=None, chase = None, **kwargs):
         self.seed = seed
         self.num_steps = 0
         self.state = self.init_state.copy()
+        self.bear_state = self.init_bear_state.copy()
+        
         self.reward_times = np.zeros(self.n_forage_spots)
         self.reward_probs = np.zeros(self.n_forage_spots)
         # Clean the list of ax_imgs, the buffer for generating videos
         self.ax_imgs = []
         # Clean the traces of the trajectory
         self.traces = [self.init_state]
-        self.bear_state = np.array([0.,0.])
-        self.chase = random.choice([True, False])
+        
+        if chase is None:
+            self.chase = random.choice([True, False])
+        else:
+            self.chase = chase
 
         dists = np.sqrt(np.sum( (self.state-self.goal_states)**2, axis=-1 ))
         bear_dist = np.sqrt(np.sum( (self.state-self.bear_state)**2 ))
         self.lmu.reset();
         obs = self.make_obs()
-        return obs, {}
+        return obs, {'chase':self.chase}
 
-    def render(self,**kwargs):
+    def render(self,title=None,**kwargs):
         fig = plt.gcf()
         ax = plt.gca()
+        ax.clear()
         ax.set_xlim([-self.radius - 0.1, self.radius + 0.1])
         ax.set_aspect('equal')
         ax.set_axis_off()
+
+        if title is not None:
+            ax.set_title(title)
 
         angles = np.linspace(0, 2*np.pi, 100)
         xs = self.radius*np.cos(angles)
@@ -255,9 +274,21 @@ class ForageBearMazeEnv(gym.Env):
         if self.render_trace:
             trace = np.array(self.traces)
             ax.plot(trace[:,0],trace[:,1], '-', color='lightgrey', linewidth=1)
-        ax.plot(self.bear_state[0],self.bear_state[1], 'rx', markersize=10)
-        ax.plot(self.state[0],self.state[1], 'b.', markersize=10)
-        
+        # ax.plot(self.bear_state[0],self.bear_state[1], 'rx', markersize=10)
+        # ax.plot(self.state[0],self.state[1], 'b.', markersize=10)
+
+        bear_img = OffsetImage(plt.imread(self.bear_sprite), zoom=0.5) 
+        ab = AnnotationBbox(bear_img, (self.bear_state[0], self.bear_state[1]),
+                        frameon=False,
+                        boxcoords="data",
+                        pad=0)
+        ax.add_artist(ab)
+        agent_img = OffsetImage(plt.imread(self.agent_sprite), zoom=0.1) 
+        ab = AnnotationBbox(agent_img, (self.state[0], self.state[1]),
+                        frameon=False,
+                        boxcoords="data",
+                        pad=0)
+        ax.add_artist(ab)
         # bear_img = ax.imshow(self.bear_sprite, extent=(self.bear_state[1], self.bear_state[1] + self.bear_radius,
         #                                                self.bear_state[0], self.bear_state[0] + self.bear_radius), origin = 'lower')
 
