@@ -6,7 +6,7 @@ import sys,os
 
 #import seaborn as sns
 from PIL import Image
-import imageio
+#import imageio
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -57,6 +57,7 @@ class ForagingEnvNeuromod(gym.Env):
         return self.state, {} # return the state
     
     def step(self, action):
+        print(self.state)
         '''
         Take an action and update the environment.
         1. [0] controls up/down
