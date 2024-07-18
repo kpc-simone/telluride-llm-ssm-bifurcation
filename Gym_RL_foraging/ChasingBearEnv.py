@@ -16,12 +16,14 @@ class ChasingBearEnv(gym.Env):
         self.reward_block2 = (0, 18, 2, 20)  # Safehouse (2x2)
         self.bear_start_area = (0, 0, 4, 4)  # Bear confined area (4x4 in top left)
         self.bear_pos = [1, 1]  # Initial position of the bear
-        self.bear_size = 1  # Size of the bear sprite
+        self.bear_size = 3  # Size of the bear sprite
+        self.agent_size = 2  # Size of the agent sprite
         self.penalty_block_size = 6  # Size of the penalty block around the bear
         self.chase = False  # Flag to indicate if the bear is chasing the agent
         self.max_steps = 200  # Maximum number of steps per episode
         self.current_step = 0  # Current step count
         self.step_size = 2 # Step size of the agent
+
         
         self.state = np.zeros((self.grid_size, self.grid_size))
         self.agent_pos = [10, 10]
@@ -33,6 +35,7 @@ class ChasingBearEnv(gym.Env):
         
         self.bear_sprite = Image.open('sprites/black_bear.png')  # Load the bear sprite image
         self.safe_house_sprite = Image.open('sprites/BrickHouse.png')  # Load the safe house sprite image
+        self.agent_sprite = Image.open('sprites/jl_sprite1.png')  # Load the agent sprite image
 
         self.is_caught = False  # Flag to indicate if the agent is caught by the bear
         
@@ -61,10 +64,11 @@ class ChasingBearEnv(gym.Env):
         # Add the new position to the trace
         self.trace.append(self.agent_pos.copy())
 
-        # Check if the agent is in the safehouse
+        # Check if the agent is in the safehouse 1
         if self.reward_block1[0] <= self.agent_pos[0] < self.reward_block1[2] and self.reward_block1[1] <= self.agent_pos[1] < self.reward_block1[3]:
             return self.state, 300, True, {}, {}  # Large reward and terminate
         
+        # check if agent is in safehouse 2
         if self.reward_block2[0] <= self.agent_pos[0] < self.reward_block2[2] and self.reward_block2[1] <= self.agent_pos[1] < self.reward_block2[3]:
             return self.state, 300, True, {}, {}
 
@@ -136,7 +140,8 @@ class ChasingBearEnv(gym.Env):
         bear_img = ax.imshow(self.bear_sprite, extent=(self.bear_pos[1], self.bear_pos[1] + self.bear_size, self.bear_pos[0], self.bear_pos[0] + self.bear_size), origin = 'lower')
 
         # Draw the agent
-        ax.plot(self.agent_pos[1], self.agent_pos[0], 'bo')  # Plot the agent's position as a blue dot
+        # ax.plot(self.agent_pos[1], self.agent_pos[0], 'bo')  # Plot the agent's position as a blue dot
+        agent_img = ax.imshow(self.agent_sprite, extent=(self.agent_pos[1], self.agent_pos[1] + self.agent_size, self.agent_pos[0], self.agent_pos[0] + self.agent_size), origin = 'lower')
 
         # Draw the trace
         trace_x = [pos[1] for pos in self.trace]
