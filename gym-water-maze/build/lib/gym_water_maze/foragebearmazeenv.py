@@ -4,20 +4,82 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib import colors
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from PIL import Image
+import random
 
 import gymnasium as gym
 from gymnasium import spaces
 
+import scipy.linalg
+from scipy.linalg import norm, eigh
+
+def generate_diagonalizable_matrix(n, norm_bound=1):
+    # Generate a random orthogonal matrix Q
+    Q, _ = np.linalg.qr(np.random.randn(n, n))
+    
+    # Generate a random diagonal matrix D with bounded norm
+    D = np.diag(np.random.uniform(-1, 1, n))
+    
+    # Construct the diagonalizable matrix A = QDQ^T
+    A = Q @ D @ Q.T
+    
+    return norm_bound*A/norm(A)
+
+
+class LMU():
+    def __init__(self, theta, q, size_in=1):
+        self.q = q              # number of internal state dimensions per input
+        self.theta = theta      # size of time window (in seconds)
+        self.size_in = size_in
+
+        # Do Aaron's math to generate the matrices
+        #  https://github.com/arvoelke/nengolib/blob/master/nengolib/synapses/analog.py#L536
+        Q = np.arange(q, dtype=np.float64)
+        R = (2*Q + 1)[:, None] / theta
+        j, i = np.meshgrid(Q, Q)
+
+        self.A = np.where(i < j, -1, (-1.)**(i-j+1)) * R
+        self.B = (-1.)**Q[:, None] * R
+
+        # discretize A, B
+        self.Ad = scipy.linalg.expm(self.A)
+        self.Bd = np.dot(np.dot(np.linalg.inv(self.A), (self.Ad-np.eye(self.q))), self.B)
+
+        self.state = np.zeros((self.q, self.size_in))
+
+        self.C1 = generate_diagonalizable_matrix(self.q)
+        self.C2 = generate_diagonalizable_matrix(self.q)
+        self.C = {True: self.C1, False: self.C2}
+            
+        super().__init__()
+
+    def step(self, x, reset=False, chase=True):
+
+        if reset:
+            self.state = np.dot(self.Bd, np.atleast_2d(x))
+        else:
+            self.state = np.dot( self.C[chase] @ self.Ad, self.state) + np.dot(self.Bd, np.atleast_2d(x))
+        # return self.state.flatten()
+
+    def reset(self):
+        self.state = np.zeros((self.q, self.size_in))
+        # return self.state.flatten()
+
 
 # adapted from https://github.com/rpinsler/gym-maze/blob/master/gym_maze/envs/maze.py
-class ForageWaterMazeEnv(gym.Env):
+class ForageBearMazeEnv(gym.Env):
     metadata = {'render_modes': ['human', 'rgb_array']}
 
     def __init__(self,
-                 radius = 6,
+                 radius = 20,
                  goal_radius = 1,
                  action_radius = 1,
                  n_forage_spots = 2,
+                 bear_radius = 1,
+                 bear_penalty = -10,
+                 bear_speed = 0.01,
+                 agent_size=0.5,
+                 agent_view_radius = 5,
                  dt= 0.001,
                  start = 'S', #S,E,W,N
                  max_steps = 100,
@@ -41,13 +103,13 @@ class ForageWaterMazeEnv(gym.Env):
         self.reward_times = np.zeros(n_forage_spots)
         self.reward_probs = np.zeros(n_forage_spots)
         if start=='S':
-            self.init_state = np.array([0,-radius*0.8])
+            self.init_state = np.array([0.,-radius*0.8])
         elif start=='N':
-            self.init_state = np.array([0,radius*0.8])
+            self.init_state = np.array([0.,radius*0.8])
         elif start=='W':
-            self.init_state = np.array([-radius*0.8,0])
+            self.init_state = np.array([-radius*0.8,0.])
         elif start=='E':
-            self.init_state = np.array([radius*0.8,0])
+            self.init_state = np.array([radius*0.8,0.])
         if n_forage_spots==1:
             self.goal_states = np.array([[0.75,0.75]])
         elif n_forage_spots==2:
@@ -55,6 +117,14 @@ class ForageWaterMazeEnv(gym.Env):
         else:
             self.goal_states = np.random.rand(n_forage_spots,2)*2 - 1
         self.goal_states = self.goal_states*radius/np.sqrt(2)
+
+        self.bear_state = np.array([0.,0.])
+        self.bear_radius = bear_radius
+        self.bear_penalty = bear_penalty
+        self.bear_speed = bear_speed
+        self.chase = True
+        self.agent_size = agent_size
+        self.agent_view_radius = agent_view_radius
 
         self.render_trace = render_trace
         self.render_mode = render_mode
@@ -64,6 +134,9 @@ class ForageWaterMazeEnv(gym.Env):
         # than storing the frames and creating an animation at the end
         self.live_display = live_display
 
+        self.lmu_q = 8
+        self.lmu = LMU(theta=max_steps//2, q=self.lmu_q, size_in=2)
+
         self.reward_type = reward_type
         if self.reward_type == 'active':
             self.action_space = spaces.Box(-action_radius, action_radius, (3,), dtype="float64")
@@ -71,7 +144,13 @@ class ForageWaterMazeEnv(gym.Env):
         else:
             self.action_space = spaces.Box(-action_radius, action_radius, (2,), dtype="float64")
 
-        self.observation_space = spaces.Box(-radius, radius, (2,), dtype="float64")
+        self.observation_space = spaces.Box(-radius, radius, (2 + 2*self.lmu_q,), dtype="float64")
+
+        self.bear_sprite = Image.open('gym_water_maze/sprites/black_bear.png')  # Load the bear sprite image
+        self.safe_house_sprite = Image.open('gym_water_maze/sprites/BrickHouse.png')  # Load the safe house sprite image
+        self.agent_sprite = Image.open('gym_water_maze/sprites/jl_sprite1.png')
+
+        
 
 
     def step(self, action):
@@ -110,14 +189,34 @@ class ForageWaterMazeEnv(gym.Env):
             reward = self.penalty
         terminated = False
 
+        bear_vec = self.state-self.bear_state
+        bear_dist = np.sqrt(np.sum( bear_vec**2 ))
+        if bear_dist <= self.bear_radius:
+            reward += self.bear_penalty
+        
+        self.bear_state += self.bear_speed*bear_vec/bear_dist
+
         if self.num_steps >= self.max_steps:
             truncated = True
         else:
             truncated = False
         # Additional info
         info = {}
-        return self.state, reward, terminated, truncated, info
 
+        # new
+        if bear_dist < self.agent_view_radius:
+            self.lmu.step(self.bear_state, chase=self.chase);
+        obs = self.make_obs()
+        return obs, reward, terminated, truncated, info
+
+    def make_obs(self):
+        # vecs = self.state-self.goal_states
+        # dists = np.sqrt(np.sum( vecs**2, axis=-1 ))
+        # vecs[np.argmin(dists), 0], vecs[np.argmin(dists), 1]
+
+        # obs = np.array([self.state[0],self.state[1], self.bear_state[0], self.bear_state[1]])
+        obs = np.concatenate([self.state.flatten(), self.lmu.state.flatten()]).flatten()
+        return obs
 
     def reset(self, seed=None, **kwargs):
         self.seed = seed
@@ -129,13 +228,21 @@ class ForageWaterMazeEnv(gym.Env):
         self.ax_imgs = []
         # Clean the traces of the trajectory
         self.traces = [self.init_state]
-        return self.state, {}
+        self.bear_state = np.array([0.,0.])
+        self.chase = random.choice([True, False])
+
+        dists = np.sqrt(np.sum( (self.state-self.goal_states)**2, axis=-1 ))
+        bear_dist = np.sqrt(np.sum( (self.state-self.bear_state)**2 ))
+        self.lmu.reset();
+        obs = self.make_obs()
+        return obs, {}
 
     def render(self,**kwargs):
         fig = plt.gcf()
         ax = plt.gca()
         ax.set_xlim([-self.radius - 0.1, self.radius + 0.1])
         ax.set_aspect('equal')
+        ax.set_axis_off()
 
         angles = np.linspace(0, 2*np.pi, 100)
         xs = self.radius*np.cos(angles)
@@ -148,7 +255,17 @@ class ForageWaterMazeEnv(gym.Env):
         if self.render_trace:
             trace = np.array(self.traces)
             ax.plot(trace[:,0],trace[:,1], '-', color='lightgrey', linewidth=1)
-        ax.plot(self.state[0],self.state[1], 'rx', markersize=10)
+        ax.plot(self.bear_state[0],self.bear_state[1], 'rx', markersize=10)
+        ax.plot(self.state[0],self.state[1], 'b.', markersize=10)
+        
+        # bear_img = ax.imshow(self.bear_sprite, extent=(self.bear_state[1], self.bear_state[1] + self.bear_radius,
+        #                                                self.bear_state[0], self.bear_state[0] + self.bear_radius), origin = 'lower')
+
+        # # Draw the agent
+        # # ax.plot(self.agent_pos[1], self.agent_pos[0], 'bo')  # Plot the agent's position as a blue dot
+        # agent_img = ax.imshow(self.agent_sprite, extent=(self.state[1], self.state[1] + self.agent_size,
+                                                         # self.state[0], self.state[0] + self.agent_size), origin = 'lower')
+        
         if self.render_mode=='human':
             return fig
         elif self.render_mode=='rgb_array':
