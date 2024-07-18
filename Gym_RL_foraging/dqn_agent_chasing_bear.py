@@ -7,6 +7,7 @@ from collections import deque
 import seaborn as sns
 
 from ChasingBearEnv import *
+from helper_functions_chasing_bear_env import *
 
 '''
 Script to inplement DQN for the ChasingBearEnv environment
@@ -29,6 +30,8 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.fc = nn.Sequential(
             nn.Linear(input_shape, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU(),
@@ -134,41 +137,47 @@ class DQNAgent:
         '''
         self.target_model.load_state_dict(self.model.state_dict())
 
+
 ## TODO: implement the training
-env = ChasingBearEnv()
-state_dim = env.observation_space.shape[0] * env.observation_space.shape[1]
-action_dim = env.action_space.n
+# env = ChasingBearEnv()
+# state_dim = env.observation_space.shape[0] * env.observation_space.shape[1]
+# action_dim = env.action_space.n
 
-agent = DQNAgent(state_dim, action_dim)
-episodes = 50
-batch_size = 32
-train_rewards = []
+# agent = DQNAgent(state_dim, action_dim)
+# episodes = 100
+# batch_size = 32
+# train_rewards = []
 
-for e in range(episodes):
-    state, _ = env.reset()
-    state = state.flatten()
-    total_reward = 0
-    for time in range(env.max_steps):
-        action = agent.act(state)
-        next_state, reward, done, _, _ = env.step(action)
-        next_state = next_state.flatten()
-        agent.remember(state, action, reward, next_state, done)
-        state = next_state
-        total_reward += reward
-        if done:
-            agent.update_target_model()
-            break
-        agent.train(batch_size)
-    train_rewards.append(total_reward)
-    print(f"Episode {e+1}/{episodes}, Total Reward: {total_reward}, Epsilon: {agent.epsilon}")
+# for e in range(episodes):
+#     state, _ = env.reset()
+#     state = state.flatten()
+#     total_reward = 0
+#     for time in range(env.max_steps):
+#         action = agent.act(state)
+#         next_state, reward, done, _, _ = env.step(action)
+#         next_state = next_state.flatten()
+#         agent.remember(state, action, reward, next_state, done)
+#         state = next_state
+#         total_reward += reward
+#         if done:
+#             agent.update_target_model()
+#             break
+#         agent.train(batch_size)
+#     train_rewards.append(total_reward)
+#     print(f"Episode {e+1}/{episodes}, Total Reward: {total_reward}, Epsilon: {agent.epsilon}")
 
-# Plot training progress
-plt.plot(train_rewards)
-plt.xlabel('Episode')
-plt.ylabel('Total Reward')
-plt.title('Training Progress')
-sns.despine()
-plt.show()
+
+# ## save the agent and the model
+# torch.save(agent.model.state_dict(), 'dqn_model_chasing_bear.pth')
+# torch.save(agent.target_model.state_dict(), 'dqn_target_model_chasing_bear.pth')
+
+# # Plot training progress
+# plt.plot(train_rewards)
+# plt.xlabel('Episode')
+# plt.ylabel('Total Reward')
+# plt.title('Training Progress')
+# sns.despine()
+# plt.show()
 
 
 
