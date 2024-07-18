@@ -68,7 +68,7 @@ class ChasingBearEnv(gym.Env):
         if self.reward_block1[0] <= self.agent_pos[0] < self.reward_block1[2] and self.reward_block1[1] <= self.agent_pos[1] < self.reward_block1[3]:
             return self.state, 300, True, {}, {}  # Large reward and terminate
         
-        # check if agen is in safehouse 2
+        # check if agent is in safehouse 2
         if self.reward_block2[0] <= self.agent_pos[0] < self.reward_block2[2] and self.reward_block2[1] <= self.agent_pos[1] < self.reward_block2[3]:
             return self.state, 300, True, {}, {}
 
